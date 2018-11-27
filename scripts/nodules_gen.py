@@ -24,20 +24,27 @@ def get_contain(path):
     listdir = os.listdir(path)
     data_field = []
     for zip_path in listdir:
-        z = zip.ZipFile(path+zip_path)
-        data_field.append(z.namelist())
-        z.close()
-    data_field = np.array(data_field, dtype='str')
-    data_field = data_field.transpose()
+        if (zip.is_zipfile(path+zip_path)):
+            z = zip.ZipFile(path+zip_path)
+            name_list = z.namelist()
+            if (len(name_list) == 176):
+                name_list.append('none')
+                name_list.append('none')
+            data_field.append(name_list)
+            z.close()
 
-    data_frame = pd.DataFrame(data_field, columns=[0, 1, 2])
+    data_field = np.asmatrix(data_field, dtype=str)
+    print(data_field.shape)
+    data_field = data_field.transpose()
+    print(data_field.shape)
+
+    data_frame = pd.DataFrame(data_field, columns=["subset0","subset1","subset2","subset3","subset4",
+                                                "subset5","subset6","subset7","subset8","subset9"])
     data_frame.to_csv("./data_frame.csv")
     return data_frame
 
 
 #def load_model(name, path):
-# z = zip.ZipFile("../data/subset0.zip")
-# print(z.namelist())
-# z.close()
-# exit()
-get_contain("../data/")
+
+
+df = get_contain("/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/data/")
