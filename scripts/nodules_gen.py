@@ -27,13 +27,17 @@ def get_contain(path):
         z = zip.ZipFile(path+zip_path)
         data_field.append(z.namelist())
         z.close()
-    print(data_field)
-    data_field = (np.ndarray(data_field, dtype='str')).transpose()
-    data_frame = pd.DataFrame(data_field[1:,:], columns=data_field[:1,:])
+    data_field = np.array(data_field, dtype='str')
+    data_field = data_field.transpose()
+
+    data_frame = pd.DataFrame(data_field, columns=[0, 1, 2])
     data_frame.to_csv("./data_frame.csv")
     return data_frame
 
 
 #def load_model(name, path):
-
-print(get_contain("../data/"))
+# z = zip.ZipFile("../data/subset0.zip")
+# print(z.namelist())
+# z.close()
+# exit()
+get_contain("../data/")
