@@ -11,11 +11,11 @@ CSV_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/CSVFILES
 EXT_FILES = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/EXTFILES/"
 
 def load_candidates(csv_path):
-	labels = pd.read_csv(path)
-	labels = pd.read_csv(path)
+	labels = pd.read_csv(csv_path)
+	labels = pd.read_csv(csv_path)
+	print(labels.head())
 	labels['seriesuid'] = labels['seriesuid'].astype('str')
-	labels['label'] = labels['label'].astype('bool')
-	labels.head()
+	labels['label'] = labels['diameter_mm'].astype('str')
 	return labels
 
 def get_info(row):
@@ -60,7 +60,46 @@ def extract_model(name, content, data_path, ext_path):
 
 	return (ext_path+mhd_file), (ext_path+raw_file)
 
-df, list_data = get_data_content(DATA_PATH, CSV_PATH)
-name = "1.3.6.1.4.1.14519.5.2.1.6279.6001.231002159523969307155990628066.mhd"
-mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
-print(mhd_file, raw_file)
+def load_itk_image(filename):
+	itkimage = sitk.ReadImage(filename)
+	numpyImage = sitk.GetArrayFromImage(itkimage)
+
+	numpyOrigin = np.array(list(reversed(itkimage.GetOrigin())))
+	numpySpacing = np.array(list(reversed(itkimage.GetSpacing())))
+
+	return numpyImage, numpyOrigin, numpySpacing
+
+def worldToVoxelCoord(worldCoord, origin, spacvoxelCoording):
+	stretchedVoxelCoord = np.absolute(worldCoord - origin)
+	voxelCoord = stretchedVoxelCoord / spacing
+	return voxelCoord
+
+def normalizePlanes(npzarray):
+	 
+	maxHU = 400.
+	minHU = -1000.
+ 
+	npzarray = (npzarray - minHU) / (maxHU - minHU)
+	npzarray[npzarray>1] = 1.
+	npzarray[npzarray<0] = 0.
+	return npzarray
+
+labels = load_candidates(CSV_PATH+"annotations.csv")
+for i, row in labels.iterrows():
+	name, x, y, z = get_info(row)
+	mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
+	numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
+	voxelCoord = worldToVoxelCoord(np.asarray([float(z),float(y),float(x)]), numpyOrigin, numpySpacing)
+
+	data_augmentation(numpyImage, voxelCoord)
+
+# exit()
+
+# df, list_data = get_data_content(DATA_PATH, CSV_PATH)
+# name = "1.3.6.1.4.1.14519.5.2.1.6279.6001.231002159523969307155990628066.mhd"
+# mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
+# print(mhd_file, raw_file)
+
+# print(numpyImage.shape)
+# print(numpyOrigin)
+# print(numpySpacing)
