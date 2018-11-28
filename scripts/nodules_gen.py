@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import cv2 as cv
-import SimpleITK as itk
+import matplotlib.pyplot as plt
+import SimpleITK as sitk
 
 import os
 import zipfile as zip
@@ -9,6 +10,16 @@ import zipfile as zip
 DATA_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/DATA/"
 CSV_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/CSVFILES/"
 EXT_FILES = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/EXTFILES/"
+
+if (os.name == 'nt'):
+	DATA_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\DATA\\"
+	CSV_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\CSVFILES\\"
+	EXT_FILES = "E:\\DL\\datasets\\Luna16\\dataset\\EXTFILES\\"
+else:
+	DATA_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/DATA/"
+	CSV_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/CSVFILES/"
+	EXT_FILES = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/EXTFILES/"
+
 
 def load_candidates(csv_path):
 	labels = pd.read_csv(csv_path)
@@ -50,8 +61,10 @@ def extract_model(name, content, data_path, ext_path):
 	path = data_path + "subset" + str(int(num_sub))
 	zip_path = path + ".zip"
 	path = "subset" + str(int(num_sub)) + "/"
+	print(path)
 	mhd_file = path + name
 	raw_file = mhd_file.replace(".mhd", ".raw")
+	print(raw_file)
 	if (zip.is_zipfile(zip_path)):
 		z = zip.ZipFile(zip_path)
 		z.extract(raw_file, path=ext_path)
@@ -84,14 +97,39 @@ def normalizePlanes(npzarray):
 	npzarray[npzarray<0] = 0.
 	return npzarray
 
-labels = load_candidates(CSV_PATH+"annotations.csv")
-for i, row in labels.iterrows():
-	name, x, y, z = get_info(row)
-	mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
-	numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
-	voxelCoord = worldToVoxelCoord(np.asarray([float(z),float(y),float(x)]), numpyOrigin, numpySpacing)
+def show_metaimg(path):
+	numpyImage, numpyOrigin, numpySpacing = load_itk_image(path)
+	print (numpyImage.shape, numpyOrigin, numpySpacing)
+	cv.namedWindow(path, cv.WINDOW_NORMAL)
+	def nothing(x):
+		pass
+	cv.createTrackbar('Z', path, 0, 511, nothing)
+	z = 0
+	while (True):
+		slice_model = normalizePlanes(numpyImage[:,z,:])
+		cv.imshow(path, slice_model)
+		k = cv.waitKey(1) & 0xFF
+		if (k==113):
+			break
+		z = cv.getTrackbarPos('Z', path)
 
-	data_augmentation(numpyImage, voxelCoord)
+
+# labels = load_candidates(CSV_PATH+"annotations.csv")
+# for i, row in labels.iterrows():
+# 	name, x, y, z = get_info(row)
+# 	mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
+# 	numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
+# 	voxelCoord = worldToVoxelCoord(np.asarray([float(z),float(y),float(x)]), numpyOrigin, numpySpacing)
+
+# 	data_augmentation(numpyImage, voxelCoord)
+
+labels = load_candidates(CSV_PATH+"annotations.csv")
+df, list_data = get_data_content(DATA_PATH, CSV_PATH)
+print(df.head())
+name = "1.3.6.1.4.1.14519.5.2.1.6279.6001.100621383016233746780170740405.mhd"
+mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
+print(mhd_file, raw_file)
+show_metaimg(mhd_file)
 
 # exit()
 
