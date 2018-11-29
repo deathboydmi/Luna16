@@ -7,10 +7,6 @@ import SimpleITK as sitk
 import os
 import zipfile as zip
 
-DATA_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/DATA/"
-CSV_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/CSVFILES/"
-EXT_FILES = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/EXTFILES/"
-
 if (os.name == 'nt'):
 	DATA_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\DATA\\"
 	CSV_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\CSVFILES\\"
@@ -24,10 +20,10 @@ else:
 def load_candidates(csv_path):
 	labels = pd.read_csv(csv_path)
 	labels = pd.read_csv(csv_path)
-	print(labels.head())
 	labels['seriesuid'] = labels['seriesuid'].astype('str')
 	labels['label'] = labels['diameter_mm'].astype('str')
-	return labels
+	data_ndarray = labels.as_matrix()
+	return labels, data_ndarray
 
 def get_info(row):
 	name = row['seriesuid'] + ".mhd"
@@ -61,10 +57,8 @@ def extract_model(name, content, data_path, ext_path):
 	path = data_path + "subset" + str(int(num_sub))
 	zip_path = path + ".zip"
 	path = "subset" + str(int(num_sub)) + "/"
-	print(path)
 	mhd_file = path + name
 	raw_file = mhd_file.replace(".mhd", ".raw")
-	print(raw_file)
 	if (zip.is_zipfile(zip_path)):
 		z = zip.ZipFile(zip_path)
 		z.extract(raw_file, path=ext_path)
@@ -82,7 +76,7 @@ def load_itk_image(filename):
 
 	return numpyImage, numpyOrigin, numpySpacing
 
-def worldToVoxelCoord(worldCoord, origin, spacvoxelCoording):
+def worldToVoxelCoord(worldCoord, origin, spacing):
 	stretchedVoxelCoord = np.absolute(worldCoord - origin)
 	voxelCoord = stretchedVoxelCoord / spacing
 	return voxelCoord
@@ -97,22 +91,45 @@ def normalizePlanes(npzarray):
 	npzarray[npzarray<0] = 0.
 	return npzarray
 
-def show_metaimg(path):
+def show_metaimg(path, voxelCoord_list=[]):
 	numpyImage, numpyOrigin, numpySpacing = load_itk_image(path)
-	print (numpyImage.shape, numpyOrigin, numpySpacing)
+	Z, X, Y = numpyImage.shape
 	cv.namedWindow(path, cv.WINDOW_NORMAL)
 	def nothing(x):
 		pass
-	cv.createTrackbar('Z', path, 0, 511, nothing)
+	cv.createTrackbar('Z', path, 0, Z-1, nothing)
 	z = 0
+	for voxelCoord in voxelCoord_list:
+		numpyImage = markNodule(numpyImage, voxelCoord)
 	while (True):
-		slice_model = normalizePlanes(numpyImage[:,z,:])
+		slice_model = normalizePlanes(numpyImage[z,:,:])
 		cv.imshow(path, slice_model)
 		k = cv.waitKey(1) & 0xFF
 		if (k==113):
 			break
 		z = cv.getTrackbarPos('Z', path)
 
+def markNodule(img, voxelCoord):
+	voxelWidth = voxelCoord[-1] + 10
+	top_left = (int(voxelCoord[2] - voxelWidth / 2), int(voxelCoord[1] - voxelWidth / 2))
+	bottom_right = (int(voxelCoord[2] + voxelWidth / 2), int(voxelCoord[1] + voxelWidth / 2))
+	marked_img = cv.rectangle(img[int(voxelCoord[0]),:,:], top_left, bottom_right, 255, 1)
+	img[int(voxelCoord[0]),:,:] = marked_img
+	return img
+
+def getNodulesInfo(name, data_ndarray, numpyOrigin, numpySpacing):
+	ind, _ = np.where(data_ndarray==name[:len(name)-4])
+	worldCoords = []
+	for i in ind:
+		worldCoords.append(data_ndarray[i,1:5])
+	worldCoords = [np.fliplr(worldCoords)[i].astype(float) for i in range(len(ind))]
+	voxelCoords = []
+	for worldCoord in worldCoords:
+		voxelCoord = worldToVoxelCoord(worldCoord[1:], numpyOrigin, numpySpacing)
+		voxelCoord = np.append(voxelCoord, worldCoord[0])
+		voxelCoords.append(voxelCoord)
+
+	return voxelCoords
 
 # labels = load_candidates(CSV_PATH+"annotations.csv")
 # for i, row in labels.iterrows():
@@ -123,21 +140,16 @@ def show_metaimg(path):
 
 # 	data_augmentation(numpyImage, voxelCoord)
 
-labels = load_candidates(CSV_PATH+"annotations.csv")
-df, list_data = get_data_content(DATA_PATH, CSV_PATH)
-print(df.head())
 name = "1.3.6.1.4.1.14519.5.2.1.6279.6001.100621383016233746780170740405.mhd"
-mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
-print(mhd_file, raw_file)
-show_metaimg(mhd_file)
+
+df, list_data = get_data_content(DATA_PATH, CSV_PATH)
+mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES) #1234
+labels, data_ndarray = load_candidates(CSV_PATH+"annotations.csv")
+
+numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
+print(numpyImage.shape)
+voxelCoords = getNodulesInfo(name, data_ndarray, numpyOrigin, numpySpacing)
+print(voxelCoords)
+show_metaimg(mhd_file, voxelCoords)
 
 # exit()
-
-# df, list_data = get_data_content(DATA_PATH, CSV_PATH)
-# name = "1.3.6.1.4.1.14519.5.2.1.6279.6001.231002159523969307155990628066.mhd"
-# mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
-# print(mhd_file, raw_file)
-
-# print(numpyImage.shape)
-# print(numpyOrigin)
-# print(numpySpacing)
