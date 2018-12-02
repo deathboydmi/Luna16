@@ -11,11 +11,14 @@ if (os.name == 'nt'):
 	DATA_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\DATA\\"
 	CSV_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\CSVFILES\\"
 	EXT_FILES = "E:\\DL\\datasets\\Luna16\\dataset\\EXTFILES\\"
+	NEW_DATA_PATH = "E:\\DL\\datasets\\Luna16\\dataset\\GENERATED_DATA\\NODULES\\"
 else:
 	DATA_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/DATA/"
 	CSV_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/CSVFILES/"
 	EXT_FILES = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/EXTFILES/"
+	NEW_DATA_PATH = "/media/deathboydmi/HDDeathBoyDmi/DL/datasets/Luna16/dataset/GENERATED_DATA/NODULES/"
 
+GEN_ING_SIZE = 128
 
 def load_candidates(csv_path):
 	labels = pd.read_csv(csv_path)
@@ -27,8 +30,8 @@ def load_candidates(csv_path):
 
 def get_info(row):
 	name = row['seriesuid'] + ".mhd"
-	x, y, z = row['coordX'], row['coordY'], row['coordZ']
-	return name, x, y, z
+	x, y, z, diameter_mm = row['coordX'], row['coordY'], row['coordZ'], row['diameter_mm']
+	return name, x, y, z, diameter_mm
 
 def get_data_content(data_path, csv_path):
 	listdir = os.listdir(data_path)
@@ -131,25 +134,66 @@ def getNodulesInfo(name, data_ndarray, numpyOrigin, numpySpacing):
 
 	return voxelCoords
 
-# labels = load_candidates(CSV_PATH+"annotations.csv")
-# for i, row in labels.iterrows():
-# 	name, x, y, z = get_info(row)
-# 	mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
-# 	numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
-# 	voxelCoord = worldToVoxelCoord(np.asarray([float(z),float(y),float(x)]), numpyOrigin, numpySpacing)
+#-------------------------------------------------------------------------------------------------------
+def data_augmentation(numpyImage, voxelCoords, newImgSize, vis=False, save_path=""):
+	new_data = []
+	ind = 0
+	for voxelCoord in voxelCoords:
+		print(voxelCoord)
+		Z = int(voxelCoord[0])
+		Y = int(voxelCoord[2])
+		X = int(voxelCoord[1])
 
-# 	data_augmentation(numpyImage, voxelCoord)
-
-name = "1.3.6.1.4.1.14519.5.2.1.6279.6001.100621383016233746780170740405.mhd"
+		nodule_size = int(round(voxelCoord[3]))
+		if (nodule_size <= 10):
+			nodule_size = int(nodule_size * 3)
+		if (nodule_size > 10 and nodule_size < 20):
+			nodule_size = int(round(nodule_size * 1.5))
+		for top in [X - newImgSize//2, X - newImgSize+nodule_size, X-nodule_size]:
+			for left in [Y - newImgSize//2, Y - newImgSize+nodule_size, Y-nodule_size]:
+				if (top < 0):
+					top = 0
+				if (left < 0):
+					left = 0
+				bottom = top + newImgSize
+				right = left + newImgSize
+				if (bottom > 511):
+					bottom = 511
+					top = bottom - newImgSize
+				if (right > 511):
+					right = 511
+					left = right - newImgSize
+				new_img = numpyImage[Z, top:bottom, left:right]
+				new_img = normalizePlanes(new_img)
+				if(vis==True):
+					cv.imshow("img", new_img)
+					cv.waitKey(0)
+				if(save_path!=""):
+					cv.normalize(new_img, new_img, 0, 255, cv.NORM_MINMAX)
+					cv.imwrite(save_path+"__"+str(ind)+".png", new_img)
+				else:
+					new_data.append(new_img)
+				ind += 1
+	return new_data
+#-------------------------------------------------------------------------------------------------------
 
 df, list_data = get_data_content(DATA_PATH, CSV_PATH)
-mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES) #1234
-labels, data_ndarray = load_candidates(CSV_PATH+"annotations.csv")
-
-numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
-print(numpyImage.shape)
-voxelCoords = getNodulesInfo(name, data_ndarray, numpyOrigin, numpySpacing)
-print(voxelCoords)
-show_metaimg(mhd_file, voxelCoords)
-
-# exit()
+labels, list_annotation = load_candidates(CSV_PATH+"annotations.csv")
+last_file = ""
+generated_nodules = []
+for i, row in labels.iterrows():
+	name, x, y, z, diameter_mm = get_info(row)
+	if (name == last_file):
+		continue
+	mhd_file, raw_file = extract_model(name, list_data, DATA_PATH, EXT_FILES)
+	numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
+	voxelCoords = getNodulesInfo(name, list_annotation, numpyOrigin, numpySpacing)
+	#show_metaimg(mhd_file, voxelCoords)
+	data_augmentation(numpyImage, voxelCoords, GEN_ING_SIZE, save_path=NEW_DATA_PATH+name[:len(name)-4])
+	last_file = name
+	os.remove(mhd_file)
+	os.remove(raw_file)
+	#if(i > 10):
+		#break
+print("exit")
+exit()
