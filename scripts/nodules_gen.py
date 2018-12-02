@@ -178,7 +178,11 @@ def data_augmentation(numpyImage, voxelCoords, newImgSize, vis=False, save_path=
 #-------------------------------------------------------------------------------------------------------
 
 df, list_data = get_data_content(DATA_PATH, CSV_PATH)
+print(df.head())
+print(list_data.shape)
 labels, list_annotation = load_candidates(CSV_PATH+"annotations.csv")
+print(labels.head())
+print(list_annotation.shape)
 last_file = ""
 generated_nodules = []
 for i, row in labels.iterrows():
@@ -189,11 +193,10 @@ for i, row in labels.iterrows():
 	numpyImage, numpyOrigin, numpySpacing = load_itk_image(mhd_file)
 	voxelCoords = getNodulesInfo(name, list_annotation, numpyOrigin, numpySpacing)
 	#show_metaimg(mhd_file, voxelCoords)
+	print(i,'/',list_annotation.shape[0], name[:len(name)-4], voxelCoords)
 	data_augmentation(numpyImage, voxelCoords, GEN_ING_SIZE, save_path=NEW_DATA_PATH+name[:len(name)-4])
 	last_file = name
 	os.remove(mhd_file)
 	os.remove(raw_file)
-	#if(i > 10):
-		#break
 print("exit")
 exit()
