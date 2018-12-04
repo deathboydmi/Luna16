@@ -16,18 +16,18 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
-import model
+import model as m
 
 parser = argparse.ArgumentParser(description='PyTorch LUNA16 Training')
 parser.add_argument('data', metavar='DIR',
 					help='path to dataset')
-parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
 					help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
 					help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 					help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=512, type=int,
 					metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
 					metavar='LR', help='initial learning rate')
@@ -35,7 +35,7 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
 					help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
 					metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument('--print-freq', '-p', default=10, type=int,
+parser.add_argument('--print-freq', '-p', default=5, type=int,
 					metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
 					help='path to latest checkpoint (default: none)')
@@ -53,7 +53,7 @@ parser.add_argument('--seed', default=None, type=int,
 best_prec1 = 0
 #torch.set_printoptions(threshold=512*256)
 
-log.basicConfig(filename='./train.log', format='%(asctime)s %(message)s', level=log.DEBUG)
+log.basicConfig(filename='./log_train_val.log', format='%(asctime)s %(message)s', level=log.INFO)
 
 def main():
 	global args, best_prec1
@@ -63,7 +63,7 @@ def main():
 	if args.distributed:
 		dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
 								world_size=args.world_size)
-	model = model.NodulesClassifier()
+	model = m.NodulesClassifier()
 	# for module in model.modules():
 		# 	if type(module) == nn.BatchNorm2d:
 		# 		for param in module.parameters():
@@ -100,6 +100,7 @@ def main():
 	train_dataset = datasets.ImageFolder(
 		traindir,
 		transforms.Compose([
+			transforms.Grayscale(),
 			transforms.RandomHorizontalFlip(),
 			transforms.ToTensor(),
 			normalize,
@@ -116,6 +117,7 @@ def main():
 
 	val_loader = torch.utils.data.DataLoader(
 		datasets.ImageFolder(valdir, transforms.Compose([
+			transforms.Grayscale(),
 			transforms.ToTensor(),
 			normalize,
 		])),
@@ -144,7 +146,7 @@ def main():
 			'state_dict': model.state_dict(),
 			'best_prec1': best_prec1,
 			'optimizer' : optimizer.state_dict(),
-		}, is_best_acc)
+		}, is_best_acc, filename="./checkpoint/model_chp.pth.tar")
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -189,7 +191,6 @@ def validate(val_loader, model, criterion):
 	batch_time = AverageMeter()
 	losses = AverageMeter()
 	top1 = AverageMeter()
-	top5 = AverageMeter()
 
 	# switch to evaluate mode
 	model.eval()
@@ -201,45 +202,34 @@ def validate(val_loader, model, criterion):
 			output = model(input)
 			loss = criterion(output, target)
 
-			prec1, prec5 = accuracy(output, target, topk=(1, 5))
-			
+			prec1 = accuracy(output, target)
 			losses.update(loss.item(), input.size(0))
-			top1.update(prec1[0], input.size(0))
-			top5.update(prec5[0], input.size(0))
+			top1.update(float(prec1[0]), input.size(0))
 
 			batch_time.update(time.time() - end)
 			end = time.time()
 
 			log.info('Test: [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                   i, len(val_loader), batch_time=batch_time, loss=losses,
-                   top1=top1, top5=top5))
-
+					'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+					'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+					'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
+					i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1))
 			print('Test: [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                   i, len(val_loader), batch_time=batch_time, loss=losses,
-                   top1=top1, top5=top5))
+					'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+					'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+					'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
+					i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1))
 
-			if i == len(val_loader) - 1:
-				last_bs = output.size(0)
-
-		log.info(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-			  .format(top1=top1, top5=top5))
-		print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-			  .format(top1=top1, top5=top5))
+		log.info(' * Prec@1 {top1.avg:.3f}'
+			  .format(top1=top1))
+		print(' * Prec@1 {top1.avg:.3f}'.format(top1=top1))
 	return top1.avg
 
 # need changes
 def save_checkpoint(state, is_best_acc, filename):
 	torch.save(state, filename)
 	if is_best_acc:
-		shutil.copyfile(filename, "")
+		shutil.copyfile(filename, filename.replace("_chp", "_best_acc"))
 
 
 class AverageMeter(object):
@@ -268,7 +258,7 @@ def adjust_learning_rate(optimizer, epoch):
 
 
 def accuracy(output, target, topk=(1,)):
-	"""Computes the precision@k for the specified values of k"""
+	"""Computes the accuracy over the k top predictions for the specified values of k"""
 	with torch.no_grad():
 		maxk = max(topk)
 		batch_size = target.size(0)
@@ -282,7 +272,6 @@ def accuracy(output, target, topk=(1,)):
 			correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
 			res.append(correct_k.mul_(100.0 / batch_size))
 		return res
-
 
 if __name__ == '__main__':
 	main()

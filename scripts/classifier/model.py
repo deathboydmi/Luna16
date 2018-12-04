@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 
 class NodulesClassifier(nn.Module):
-	def __init__(self, class_num=2):
+	def __init__(self, num_classes=2):
 		super(NodulesClassifier, self).__init__()
+		self.num_classes = num_classes
 		self.features = nn.Sequential(
 			nn.Conv2d(1, 4, kernel_size=3, stride=1, padding=1),
 			nn.BatchNorm2d(num_features=4),
@@ -38,10 +39,10 @@ class NodulesClassifier(nn.Module):
 		self.classifier = nn.Sequential(
 			nn.Conv2d(256, 64, kernel_size=1),
 			nn.Tanh(),
-			nn.Conv2d(64, class_num, kernel_size=1)
+			nn.Conv2d(64, self.num_classes, kernel_size=1),
+			nn.AdaptiveAvgPool2d((1, 1))
 		)
 
-		#init
 		for f in self.features:
 			if isinstance(f, nn.Conv2d):
 				nn.init.kaiming_normal_(f.weight, nonlinearity='relu')
@@ -58,10 +59,9 @@ class NodulesClassifier(nn.Module):
 	def forward(self, x):
 		x = self.features(x)
 		x = self.gaap(x)
-		x = x.view(x.size(0), -1)
 		x = self.classifier(x)
 
-		return x
+		return x.view(x.size(0), self.num_classes)
 
 if __name__ == "__main__":
 	model = NodulesClassifier()
