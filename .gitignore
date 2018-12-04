@@ -1,0 +1,12 @@
+/GENERATED_DATA/*
+/scripts/__pycache__/*
+/scripts/.vscode/*
+
+*.csv
+*.png
+
+*.rar
+*.tar
+*.zip
+
+*.log
